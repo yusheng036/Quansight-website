@@ -6,6 +6,10 @@ import remarkMath from 'remark-math';
 
 export default defineConfig({
   output: 'static',
+  markdown: {
+    remarkPlugins: [remarkMath],
+    rehypePlugins: [rehypeKatex],
+  },
   integrations: [
     react(),
     mdx({
