@@ -113,7 +113,7 @@ In MLIR, we would have to introduce a unique SSA for every operation and constan
 ## Buffer Handling
 
 <p align="center">
-  <img src="/posts/finch-meets-mlir/iceberg.png" width="300" alt="tip of the iceberg meme">
+  <img src="/posts/finch-meets-mlir/iceberg.png" width="300" alt="tip of the iceberg meme" />
 </p>
 
 
@@ -146,7 +146,7 @@ To sucessfully lower Finch Assembly IR buffers, the MLIR backend recursively low
     %v = llvm.extractvalue %_A_15[0, 0, 0, 0] : !llvm.struct<(!llvm.struct<(!llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>)>, i64, i64)>, i64, i64)>, !llvm.struct<(i64, i64)>, i64, i1)>
     %v_2 = builtin.unrealized_conversion_cast %v : !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)> to memref<?xf64>
     ```
-    We could see that the dense buffer is being indexed to the ElementLevel with "%_A_15[0, 0, 0, 0]" to extract the buffer. The buffer is then typecasted to "memref<?xf64>" as memref.store and memref.load can only be performed on memref buffers as seen here:
+    We could see that the dense buffer is being indexed to the ElementLevel with `%_A_15[0, 0, 0, 0]` to extract the buffer. The buffer is then typecasted to `memref<?xf64>` as memref.store and memref.load can only be performed on memref buffers as seen here:
 
     ```text
     %v_52 = memref.load %v_2[%v_37] : memref<?xf64>
@@ -338,7 +338,7 @@ Currently, scansearch does not support index buffers with other data types, such
 error: "-":87:33: use of value '%v_37' expects different type than prior uses: 'i32' vs 'index'
 note: "-":86:7: prior use here
 ```
-This error is to be expected as we hardcoded the scansearch function with this buffer type with "memref<?xindex>". One possible support that we can come up for this is to generate a variant of this function per element type instead. We have opened up an [issue](https://github.com/finch-tensor/finch-tensor/issues/625) in the repository for this.
+This error is to be expected as we hardcoded the scansearch function with this buffer type as `memref<?xindex>`. One possible solution is to generate a variant of this function for each element type. We have opened an [issue](https://github.com/finch-tensor/finch-tensor/issues/625) in the repository for this.
 
 ## Bridging Finch-tensor to Scipy.sparse
 
@@ -394,22 +394,22 @@ The first kernel that we would like to explore is Sampled Dense-Dense Matrix Mul
 
 Below is a comparison between the SciPy, MLIR, and Numba backends against the SDDMM kernel:
 
-<div style="display: flex; flex-direction: row; flex-wrap: nowrap; gap: 1rem; align-items: flex-start; width: 100%;">
-  <figure style="flex: 0 0 calc(50% - 0.5rem); width: calc(50% - 0.5rem); margin: 0; min-width: 0;">
+<div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', gap: '1rem', alignItems: 'flex-start', width: '100%' }}>
+  <figure style={{ flex: '0 0 calc(50% - 0.5rem)', width: 'calc(50% - 0.5rem)', margin: 0, minWidth: 0 }}>
     <img
       src="/posts/finch-meets-mlir/sddmm_timings_bar.png"
       alt="SDDMM execution-time comparison between MLIR, Numba, and SciPy sparse backends"
-      style="display: block; width: 100%; height: auto;"
-    >
-    <figcaption class="mt-2 text-center">Execution Time (lower is better)</figcaption>
+      style={{ display: 'block', width: '100%', height: 'auto' }}
+    />
+    <figcaption className="mt-2 text-center">Execution Time (lower is better)</figcaption>
   </figure>
-  <figure style="flex: 0 0 calc(50% - 0.5rem); width: calc(50% - 0.5rem); margin: 0; min-width: 0;">
+  <figure style={{ flex: '0 0 calc(50% - 0.5rem)', width: 'calc(50% - 0.5rem)', margin: 0, minWidth: 0 }}>
     <img
       src="/posts/finch-meets-mlir/sddmm_speedup_bar.png"
       alt="SDDMM speedup comparison between MLIR, Numba, and SciPy sparse backends"
-      style="display: block; width: 100%; height: auto;"
-    >
-    <figcaption class="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
+      style={{ display: 'block', width: '100%', height: 'auto' }}
+    />
+    <figcaption className="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
   </figure>
 </div>
 
@@ -426,28 +426,26 @@ For clarity, the computation performed by each kernel is expressed below using i
 - SpGEMM: $C_{ik} = \sum_j A_{ij} B_{jk}$
 - SpGEMM2: $D_{il} = \sum_{j,k} A_{ij} B_{jk} C_{kl}$
 
-<figure style="margin: 2rem auto 0; width: 100%; max-width: 72rem;">
+<figure style={{ margin: '2rem auto 0', width: '100%', maxWidth: '72rem' }}>
   <img
     src="/posts/finch-meets-mlir/combined_timings.png"
     alt="Execution-time comparison of the SciPy, MLIR, and Numba backends across Hadamard, SpMV, SpGEMM, and SpGEMM2 kernels"
-    style="display: block; width: 100%; height: auto;"
-  >
-  <figcaption class="mt-2 text-center">Execution times across scientific computing kernels (lower is better)</figcaption>
+    style={{ display: 'block', width: '100%', height: 'auto' }}
+  />
+  <figcaption className="mt-2 text-center">Execution times across scientific computing kernels (lower is better)</figcaption>
 </figure>
 
 For both the Hadamard multiplication and SpMV kernel, we can see that SciPy outperforms both of the finch-tensor backends. However, we see that both of the finch-tensor backends performs much better than the Scipy backend on the more complex kernels like SpGEMM and SpGEMM2. We suspect that currently finch-tensor writes directly to a dense output buffer, whereas Scipy has to write to a sparse output buffer, which is more computationally heavy and expensive. On top of that, SpGEMM2 introduces intermediates which provides finch-tensor an opportunity to fuse its operation.
 
-<figure style="margin: 2rem auto 0; width: 100%; max-width: 72rem;">
+<figure style={{ margin: '2rem auto 0', width: '100%', maxWidth: '72rem' }}>
   <img
     src="/posts/finch-meets-mlir/combined_speedups.png"
     alt="MLIR speedup over Numba across Hadamard, SpMV, SpGEMM, and SpGEMM2 kernels"
-    style="display: block; width: 100%; height: auto;"
-  >
-  <figcaption class="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
+    style={{ display: 'block', width: '100%', height: 'auto' }}
+  />
+  <figcaption className="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
 </figure>
 
 In the graph above, we see a MLIR speedup graph against Numba against the various scientific computing kernels. We see a noticeable improvement in most of the kernels except for the Hadamard multiplication kernel. This proves that MLIR is the preferred backend in finch-tensor for most scientific computing kernels. The MLIR backend performs better than the Numba backend when the kernel requires a reduction and complex control flow, whereas the Numba backend takes the stage when the kernel requires a simpler, memory bound operation.
 
 ## Future Goals
-
-
