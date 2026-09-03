@@ -27,7 +27,7 @@ For my first task in the internship, I am tasked to determine the feasibility of
 Coming into this project, I had no clue what MLIR was. I had to dig through every MLIR documentation and understand throughly what a dialect was. To my best understanding, a dialect is a specialized IR that allows MLIR to express control over every layer of execution. There were plenty of dialects in MLIR, but this were some of the unique ones that I have identified:
 
 - [gpu](https://mlir.llvm.org/docs/Dialects/GPU/) dialect provides a middle level abstraction for launching GPU kernels.
-- [Tensor Operator Set Architecture(TOSA)](https://mlir.llvm.org/docs/Dialects/TOSA/#tosa-and-tensor-level-expressiveness) dialect represent tensor computations common in machine learning.
+- [TOSA](https://mlir.llvm.org/docs/Dialects/TOSA/#tosa-and-tensor-level-expressiveness) dialect represent tensor computations common in machine learning.
 -  [XeGPU](https://mlir.llvm.org/docs/Dialects/XeGPU/) dialect provides GPU abstractions for Intel Xe GPUs.
 
 The accessibiltiy of MLIR is limitless, allowing programs to extend to GPU and even the most poignant hardware like Intel Xe GPUs, and each dialects are easily utilised with easy, and composable features.
@@ -44,6 +44,9 @@ These were the dialects that were utilised in our lowering:
 - [llvm](https://mlir.llvm.org/docs/Dialects/LLVM/) dialect to represent ctypes struct passed into the kernel
 - [builtin](https://mlir.llvm.org/docs/Dialects/Builtin/) dialect to convert llvm.struct into memref
 - [func](https://mlir.llvm.org/docs/Dialects/Func/) dialect to define mlir functions
+
+This article presents my thoughts and understanding of MLIR. If you are interested in exploring my contributions, they are summarized in two pull requests:
+the [first PR](https://github.com/finch-tensor/finch-tensor/commit/81490615793eb20de27b0bd927a00a178883c103) and the [second PR](https://github.com/finch-tensor/finch-tensor/commit/eea27d7fcd2a83c00812ca06b600dff7768f32c9).
 
 ## Arith dialect
 
@@ -446,6 +449,30 @@ For both the Hadamard multiplication and SpMV kernel, we can see that SciPy outp
   <figcaption className="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
 </figure>
 
-In the graph above, we see a MLIR speedup graph against Numba against the various scientific computing kernels. We see a noticeable improvement in most of the kernels except for the Hadamard multiplication kernel. This proves that MLIR is the preferred backend in finch-tensor for most scientific computing kernels. The MLIR backend performs better than the Numba backend when the kernel requires a reduction and complex control flow, whereas the Numba backend takes the stage when the kernel requires a simpler, memory bound operation.
+In the graph above, we see a MLIR speedup graph against Numba against the various scientific computing kernels. We see a noticeable improvement in most of the kernels except for the Hadamard multiplication kernel. This proves that MLIR is the preferred backend in finch-tensor for most scientific computing kernels.
+The MLIR backend performs better than the Numba backend when the kernel requires a reduction and complex control flow, whereas the Numba backend takes the stage when the kernel requires a simpler, memory bound operation.
 
 ## Future Goals
+
+My experience in this internship has been a blast. My knowledge of MLIR started with bewilderment and astonishment
+at the complexity of the language, but eventually I grew to appreciate it and even relish the challenge of writing my own MLIR kernels.
+I am proud of my contributions to finch-tensor, as we can pursue many different pathways with the new backend implementations.
+
+For future implementations, we plan to extend the MLIR backend to support GPU execution. This would indeed be an exciting and monumental project, as users
+and researchers can finally test the performance of finch-tensor on gpu hardwares. There are not many sparse tensor libraries on the market that provide
+extensive GPU support, so this would help finch-tensor stand out. Personally, I would be interested to see how finch-tensor compares with other sparse tensor libraries
+on GPU architecture.
+
+We plan to make greater use of MLIR dialects, particularly the Linalg dialect, to enable faster execution of sparse kernels.
+Combining fusion with the Linalg dialect is an optimization that sparks my imagination. We could also
+extend support for parallelism in finch-tensor using scf.parallel. Multithreading would offer another avenue of optimization
+for finch-tensor to explore.
+
+I am excited at the potential that my contributions have opened up to.
+
+<img
+  src="/posts/finch-meets-mlir/baby_image.png"
+  alt="A child wearing a red knit hat smiles at the camera."
+  style={{ display: 'block', width: '100%', maxWidth: '28rem', height: 'auto', margin: '2rem auto' }}
+/>
+
