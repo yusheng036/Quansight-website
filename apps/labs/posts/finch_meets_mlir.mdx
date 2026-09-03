@@ -14,27 +14,28 @@ hero:
 
 ## Introduction
 
-This summer, I had the opportunity to work on [finch-tensor](https://github.com/finch-tensor/finch-tensor) for my internship. I was given a task to implement a brand new backend to the compiler, namely [MLIR](https://mlir.llvm.org/) or Multi-Level IR Compiler Framework, and implement some technical work that bridges Scipy arrays to Finch tensors. Before I dive deep into the technical jargon, here is a short story about an undergraduate student finding his footing in the open-source community.
+This summer, I had the opportunity to work on [finch-tensor](https://github.com/finch-tensor/finch-tensor) for my internship. I was given a project to implement a brand new backend to the compiler, namely [MLIR](https://mlir.llvm.org/) or Multi-Level IR Compiler Framework, and implement some technical work that bridges Scipy arrays to Finch tensors. Before I dive deep into the technical jargon, here is a short story about an undergraduate student finding his footing in the open-source community.
 
-During my freshman year, I took my first Python introductory course. It didnt leave a big impression on me. The class revolves around writing code by hand, and that was a miserable experience. It was only when I took an algorithm course the very next semester, I started realizing the complexity yet beautiful nature of the computer science field. During my sophomore year, I start cold-emailing professors regarding my interest to contribute to their research preferably algorithms. One of my professors reached back out to me telling me that there was a new faculty coming into the college that is doing interesting work in sparse tensors. I was thrilled to be a part of this research. I didnt know it at that time but that decision was going to change my life as that was my first exposure to the open-source community.
+During my freshman year, I took my first Python introductory course. It didn't leave a big impression on me. The class revolved around writing code by hand, which I found to be a miserable experience.
+It was only when I took an algorithms course the following semester that I began to realize the complexity and beauty of the computing world. During my sophomore year, I started cold-emailing professors about my interest in contributing to their research. One of my professors reached back out to me, telling me that there was a new faculty member coming into the college who was doing interesting work in sparse tensors. I was thrilled to be a part of this research. I didn't know it at the time, but that decision was going to change my life, as that was my first exposure to the open-source community.
 
-Being part of an open-source community felt very new and eye-opening to me. Having so many bright minds working on the same project collaboratively while joining from different time zones. Contributing to this community also introduced new challenges I have never faced previously from filing bug issues on github that are read by the community and making detailed pull request for review. I had to learn to communcate my ideas and contributions clearly on the development meetings. That was where I met [Mateusz Sokół](https://github.com/mtsokol), who became my mentor for the Quansight Internship Program, thus leading to the creation of this blog post.
+Being part of an open-source community felt very new and eye-opening to me. Having so many bright minds working on the same project collaboratively while joining from different time zones. Contributing to this community also introduced new challenges I have never faced previously from filing bug issues on github that are read by the wider community and making detailed pull requests for review. I had to learn to communicate my ideas and contributions clearly in the development meetings. That was where I met [Mateusz Sokół](https://github.com/mtsokol), who became my mentor for the Quansight Internship Program, thus leading to the creation of this blog post.
 
-For my first task in the internship, I am tasked to determine the feasibility of lowering Finch Assembly IR (Intermediate Representation) to MLIR. Lets get right into it!
+For my first task in the internship, I was tasked with determining the feasibility of lowering Finch Assembly IR (Intermediate Representation) to MLIR. Let's get right into it!
 
 ## Understanding MLIR
 
-Coming into this project, I had no clue what MLIR was. I had to dig through every MLIR documentation and understand throughly what a dialect was. To my best understanding, a dialect is a specialized IR that allows MLIR to express control over every layer of execution. There were plenty of dialects in MLIR, but this were some of the unique ones that I have identified:
+Coming into this project, I had no clue what MLIR was. I had to dig through all of the MLIR documentation and understand thoroughly what a dialect was. To my best understanding, a dialect is a specialized IR that allows MLIR to express control over every layer of execution. There were plenty of dialects in MLIR, but these were some of the unique ones that I have identified:
 
 - [gpu](https://mlir.llvm.org/docs/Dialects/GPU/) dialect provides a middle level abstraction for launching GPU kernels.
-- [TOSA](https://mlir.llvm.org/docs/Dialects/TOSA/#tosa-and-tensor-level-expressiveness) dialect represent tensor computations common in machine learning.
+- [TOSA](https://mlir.llvm.org/docs/Dialects/TOSA/#tosa-and-tensor-level-expressiveness) dialect represents tensor computations common in machine learning.
 -  [XeGPU](https://mlir.llvm.org/docs/Dialects/XeGPU/) dialect provides GPU abstractions for Intel Xe GPUs.
 
-The accessibiltiy of MLIR is limitless, allowing programs to extend to GPU and even the most poignant hardware like Intel Xe GPUs, and each dialects are easily utilised with easy, and composable features.
+The versatility of MLIR is extensive, allowing programs to extend to GPU and even specialized hardware such as Intel Xe GPUs, and each dialects are easily utilised with easy, and composable features.
 
-To circle back to my project, I had to determine the feasibility of lowering Finch Assembly IR to MLIR. Finch Assembly IR is a backend-agnostic IR in finch-tensor that allows code generation lowering to any specific backend. Currrently, finch-tensor has two backends: C and Numba. MLIR would be vastly different from the two other backends, as Numba was written in Python while C was written in C. Implementing MLIR would take a great understanding of the MLIR language and its capability. Does MLIR allows the lowering of Finch Assembly IR considering its unique semantics and assumption?
+As part of my project, I had to determine the feasibility of lowering Finch Assembly IR to MLIR. Finch Assembly IR is a backend-agnostic IR in finch-tensor that allows code generation lowering to any specific backend. Currently, finch-tensor has two backends: C and Numba. MLIR would be vastly different from the two other backends, as Numba was written in Python while C was written in C. Implementing MLIR would take a great understanding of the MLIR language and its capability. Does MLIR allow the lowering of Finch Assembly IR, considering its unique semantics and assumptions?
 
-My first task in the internship would be drafting up a hand-written MLIR kernel with a minimal set of dialects usage to match the Finch Assembly IR in finch-tensor. We deemed that Dense Matrix Multiplication, Sparse Matrix Multiplication and Sampled Dense-Dense Matrix Multiplication(SDDMM) would be the kernels we try to lower to MLIR.
+My first task in the internship would be drafting up a hand-written MLIR kernel with a minimal set of dialects usage to match the Finch Assembly IR in finch-tensor. We deemed that Dense Matrix Multiplication, Sparse Matrix Multiplication and Sampled Dense-Dense Matrix Multiplication (SDDMM) would be the kernels we try to lower to MLIR.
 
 These were the dialects that were utilised in our lowering:
 
@@ -45,7 +46,7 @@ These were the dialects that were utilised in our lowering:
 - [builtin](https://mlir.llvm.org/docs/Dialects/Builtin/) dialect to convert llvm.struct into memref
 - [func](https://mlir.llvm.org/docs/Dialects/Func/) dialect to define mlir functions
 
-This article presents my thoughts and understanding of MLIR. If you are interested in exploring my contributions, they are summarized in two pull requests:
+This article presents my thoughts on and understanding of MLIR. If you are interested in exploring my contributions, they are summarized in two pull requests:
 the [first PR](https://github.com/finch-tensor/finch-tensor/commit/81490615793eb20de27b0bd927a00a178883c103) and the [second PR](https://github.com/finch-tensor/finch-tensor/commit/eea27d7fcd2a83c00812ca06b600dff7768f32c9).
 
 ## Arith dialect
@@ -65,7 +66,7 @@ Tackling this dialect was tougher than it initially seemed. In MLIR, all values 
         # Signed-integer minimum.
         return "arith.minsi"
 ```
-Every function in the Arith dialect has a different operation for float, unsigned integer and signed integer. We need to follow MLIR tight type checking to sucessfully lower our IR.
+Every function in the Arith dialect has a different operation for float, unsigned integer and signed integer. We need to follow MLIR's tight type checking to successfully lower our Finch Assembly IR.
 
 This is an example of a failed-compiled code:
 ```text
@@ -78,7 +79,7 @@ This is an example of a failed-compiled code:
 // Fails due to typing inconsistencies.
 %mul = arith.minsi %0, %1 : index
 ```
-The reason behind the failed compilation was because both of the values used in the operation does not agree on a common type with %0 being float type and %1 being an index type. When we execute the minimum  operation, the %0 value does not agree with the strict type checking of the minsi operation, as minsi is only designated for signed integer values. However, the fix was just one line away!
+The reason behind the failed compilation was because both of the values used in the operation do not agree on a common type, with %0 being float type and %1 being an index type. When we execute the minimum operation, the %0 value does not agree with the strict type checking of the minsi operation, as minsi is only designated for signed integer values. However, the fix was just one line away!
 
 This is the right compiled code:
 ```text
@@ -91,9 +92,9 @@ This is the right compiled code:
 // Performs min operation.
 %mul = arith.minimumf %0, %new_1 : float
 ```
-This code compiles because we used arith.index_cast to type-cast %1 with float type to %new_1 with index type. This type casting is prevalent throughout the lowering process as we had to follow the strict type checking that MLIR abids to.
+This code compiles because we used arith.index_cast to type-cast %1 with float type to %new_1 with index type. This type casting is prevalent throughout the lowering process as we had to follow the strict type checking that MLIR abides by.
 
-MLIR express values in the form of SSA (Static Single Assignment), where every value is assigned once and remains immutable. Chain operations was prevalent in Finch Assembly IR. Here is a snippet of it:
+MLIR expresses values in the form of SSA (Static Single Assignment), where every value is assigned once and remains immutable. Chained operations were prevalent in Finch Assembly IR. Here is a snippet of it:
 
 ```text
 #i#41__pos: int64 = add(0, mul(#_A_3#38_stride_0, #i#41))
@@ -120,9 +121,9 @@ In MLIR, we would have to introduce a unique SSA for every operation and constan
 </p>
 
 
-Operation handling was just the tip of the iceberg; buffer management gets even more technical and complicated. It requires an in-depth compiler theory knowledge: ABI lowering, memory management and memory ownership. Passing buffers from an IR to another language requires complicated serializing and deserializing logic to pass buffers' metadata (i.e strides and shapes) otherwise the target language would not be able to extract any metadata from the struct passed into the kernel.
+Operation handling was just the tip of the iceberg; buffer management gets even more technical and complicated. It requires an in-depth compiler theory knowledge: ABI lowering, memory management and memory ownership. Passing buffers from one IR to another language requires complicated serializing and deserializing logic to pass buffers' metadata (i.e strides and shapes) otherwise the target language would not be able to extract any metadata from the struct passed into the kernel.
 
-First and foremost, I would like to talk about how buffers work in finch-tensor. Currently, buffers in finch-tensor are one-dimensional, resizable block of memory and appears as leaf fields at the ElementLevel. Level are nested into chains, with each level representing the format of one dimension. Dense levels provides their dimension's size and strides, while sparse levels does the same but adds integer buffers (ptr and idx), that record the tensor's nonzero entries. FiberTensor wraps the outermost level, accompanying it with the tensor's shape, pos and dirty-bit.
+First and foremost, I would like to talk about how buffers work in finch-tensor. Currently, buffers in finch-tensor are one-dimensional, resizable blocks of memory and appear as leaf fields at the ElementLevel. Levels are nested into chains, with each level representing the format of one dimension. Dense levels provide their dimension's size and strides, while sparse levels do the same but add integer buffers (ptr and idx) that record the tensor's nonzero entries. FiberTensor wraps the outermost level, accompanying it with the tensor's shape, pos and dirty-bit.
 
 ```text
 Dense Matrix Construction:
@@ -141,7 +142,7 @@ FiberTensor
         └── ElementLevel
 ```
 
-To sucessfully lower Finch Assembly IR buffers, the MLIR backend recursively lowers each StructFtype to a nested llvm struct, and unpack it in the body with llvm.extractvalue indexing. The llvm.structs are type casted to memref with builtin.unrealized_conversion_cast and integer scalars are type casted with arith.index_cast.
+To successfully lower Finch Assembly IR buffers, the MLIR backend recursively lowers each StructFtype to a nested llvm struct, and unpacks it in the body with llvm.extractvalue indexing. The llvm.structs are type casted to memref with builtin.unrealized_conversion_cast and integer scalars are type casted with arith.index_cast.
 
 - This is an example of a dense buffer being typecasted to memref:
 
@@ -159,14 +160,14 @@ On top of that, the function parameters and the return of the structs have to be
 
 Every func.func MLIR creates are tagged with llvm.emit_c_interface so that MLIR generates a C-ABI wrapper. The kernel builds a ctypes.Structure from the StructFType, and passes a pointer to that struct as an argument to the compiled kernel.
 
-As structs cannot be returned through a normal return register, the caller allocates space for the return struct, and pass a pointer to the kernel as an extra argument. The kernel write the finished result struct into %_ret using llvm.store. Afterwards, the kernel reconstructs the struct into Finch tensor objects, which the compute function returns. Currently, buffer cannot be allocated or resized in MLIR; it only reads and writes to them, so %_ret just carries back a copy of a descriptor the caller already has. Once buffer allocation buffer is supported, the kernel would be able to emit memref.alloc and memref.realloc, and integer buffers would come back through the struct stored to %_ret. We have raised an [issue](https://github.com/finch-tensor/finch-tensor/issues/636) about this in the repository.
+As structs cannot be returned through a normal return register, the caller allocates space for the return struct, and pass a pointer to the kernel as an extra argument. The kernel write the finished result struct into %_ret using llvm.store. Afterwards, the kernel reconstructs the struct into Finch tensor objects, which the compute function returns. Currently, buffer cannot be allocated or resized in MLIR; it only reads and writes to them, so %_ret just carries back a copy of a descriptor the caller already has. Once allocation buffer is supported, the kernel would be able to emit memref.alloc and memref.realloc, and integer buffers would come back through the struct stored to %_ret. We have raised an [issue](https://github.com/finch-tensor/finch-tensor/issues/636) about this in the repository.
 
 - This is an example of func.func for a dense matmul kernel
 
     ```text
     func.func @main(%_A_15: ..., %_A_16: ..., %_A_7: ..., %_ret: !llvm.ptr) attributes {llvm.emit_c_interface}
     ```
-   The main function takes in four arguments: two Dense(Dense(Element)) matrices (%_A_15, %_A_16), one BufferizedNDArray dense output matrix (%_A_7) and %_ret, where the result struct is stored into.
+   The main function takes in four arguments: two `Dense(Dense(Element))` matrices (`%_A_15`, `%_A_16`), one `BufferizedNDArray` dense output matrix (`%_A_7`) and `%_ret`, where the result struct is stored into.
 
    ```text
     %v_56 = llvm.mlir.undef : !llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.struct<(i64, i64)>, !llvm.struct<(i64, i64)>)>)>
@@ -178,14 +179,14 @@ As structs cannot be returned through a normal return register, the caller alloc
 
 ## scf Handling
 
-Among all of the dialects that I have dealt with throughout the internship, I would say that the SCF dialect has given me the most trouble. Since Static Single Assignment (SSA) are immutable, every loop-carried variable can never be updated in place, and instead produces an entirely new value. It gets incredibly confusing to track the dataflow of each variable. Following a value assignment through a while and for loop has never been harder.
+Among all of the dialects that I have dealt with throughout the internship, I would say that the SCF dialect has given me the most trouble. Since Static Single Assignment (SSA) values are immutable, no loop-carried variable can be updated in place; each instead produces an entirely new value. It gets incredibly confusing to track the dataflow of each variable. Following a value assignment through a while and for loop has never been harder.
 
-On top of that, scf functions requires an additional pass through the entire control flow to determine the variable that have been updated. If there was any value reassignment within the control flow, we would have to make a new SSA at the start, and allow the value to be reassigned with its types. To keep track of all the values, we used a scoped dictionary to track every rewrite of the values, and we recursively scan the control flow's body for rewrites in the scoped dictionary to write its new arguments.
+On top of that, scf constructs require an additional pass through the entire control flow to determine the variables that have been updated. If there was any value reassignment within the control flow, we would have to make a new SSA at the start, and allow the value to be reassigned with its types. To keep track of all the values, we used a scoped dictionary to track every rewrite of the values, and we recursively scan the control flow's body for rewrites in the scoped dictionary to write its new arguments.
 
-In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and scf.while. Lets walk through each of the implementation:
+In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for, and scf.while. Let's walk through each of the implementations:
 
 -   ## scf.if
-    In the example below, we see the usage of the scf.if from the sparse matmul kernel. There are many parts of the code that sticks out. First of all, the condition of the branch is defined outside of the if statement. Only the condition's SSA is passed into the if statement parameter.
+    In the example below, we see the usage of the scf.if from the sparse matmul kernel. There are many parts of the code that stick out. First of all, the condition of the branch is defined outside of the if statement. Only the condition's SSA is passed into the if statement parameter.
 
     ```text
     # If Condition
@@ -203,9 +204,9 @@ In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and 
     scf.yield %v_73 : index
     }
     ```
-    The if statement also creates its own result in SSA form on the left of the if statement with its type defined on the right. We made two different region to achieved this: a main block and a body block with its own dictionary. The body block would be executed first to examine the rewrite made to its dictionary. When we have accumulated all of the variables that have been rewritten, we update the main block's dictionary with a new return SSA for each rewritten value. We would then write a list of the new SSA right beside the if statement.
+    The if statement also creates its own result in SSA form on the left with its type defined on the right. We made two different regions to achieve this: a main block and a body block with its own dictionary. The body block would be executed first to examine the reassignment made to its dictionary. After collecting all rewritten variables, we update the main block’s dictionary with a new return SSA for each value and emit the resulting SSA list beside the if statement.
 
-    You could try to follow it yourself, every new SSA is made by calling freshen where they place an accumulator that increments every time it has been called. You could see that the inner body is made before the outer body as %v_85 comes after %v_86.
+    You could try to follow it yourself, every new SSA is made by calling freshen where they place an accumulator that increments every time it has been called. You could see that the inner body is made before the outer body as %v_86 comes before %v_85.
 
     In the original Finch Assembly IR, the if statement does not have an else call. As seen here:
 
@@ -213,7 +214,7 @@ In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and 
     if lt(load(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), q), 0):
         q: finch.int64 = scansearch(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), 0, q, sub(q_stop, 1))
     ```
-    However, we see the existence of the else block in the MLIR code. The reasoning behind this addition was that we track the value reassignment in the body block before the execution of the lowering. The body block compares its dictionary with the main block to track the values that has been mutated or reassigned to determine whether the else block is written. Only in some unique cases, like rewriting a buffer and making a new value within the if statement, where the else block would not be emitted.
+    However, we see the existence of the else block in the MLIR code. The reasoning behind this addition was that we track the value reassignment in the body block before the execution of the lowering. The body block compares its dictionary with the main block to track the values that have been mutated or reassigned to determine whether the else block is written. Only in some unique cases, like rewriting a buffer and making a new value within the if statement, where the else block would not be emitted.
 
 
 - ## scf.for
@@ -230,7 +231,7 @@ In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and 
     The example above shows an output buffer being initialized with zeroes. The operation used a scf.for loop to iterate across every input in the buffer. This is a quick rundown of what each SSA represents. %v_19 is the loop's starting index, %v_20 is the buffer's length, and the upper bound of the loop. %v_21 is the step size, while %v_22 represent the induction variable that is advanced from %v_19 toward %v_20 by %v_21 on each iteration. All of the SSA values involved in a for loop have to be type-cast to the specialized MLIR index type to be compiled.
     The dictionary are updated with the new variables after every iteration.
 
-    MLIR for loop resembles a for loop we would see typically see in C and Python. The for loop gave me a sense of normalcy that I can't really describe in words. Trying to understand MLIR from scratch was a difficult task but lowering it from another IR was an upheavel.
+    MLIR for loop resembles a for loop we would typically see in C and Python. The for loop gave me a sense of normalcy that I can't really describe in words. Trying to understand MLIR from scratch was a difficult task but lowering it from another IR was an upheaval.
 
 - ## scf.while
     Lowering the Finch Assembly IR while loops to MLIR while loops was by far the toughest task in this internship. I was expecting a simple while loop that imitates the while loop you see in Python, but it looks wildly different from my expectations. This is an example of how the while loop is used in our sparse matrix multiplication kernel:
@@ -253,14 +254,14 @@ In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and 
         }
     ```
 
-    The while loop in MLIR is seperated into three distinct regions: while parameter, condition block, and the while block. Lets disect each region individually.
+    The while loop in MLIR is separated into three distinct regions: while parameter, condition block, and the while block. Let's dissect each region individually.
 
     - ```text
         %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index)
         ```
-        Similar to scf.if, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have be reassigned using the scoped dictionary.
+        Similar to scf.if, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have been reassigned using the scoped dictionary.
 
-        Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop is defined after the kernel has lowered the entire loop as seen from the SSA yielded from the while body being %v_129 and the result of the while loop being %v_130. The output of the loop is unpacked into these three unique SSA:
+        Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop are defined after the kernel has lowered the entire loop, as seen from the SSA yielded from the while body being %v_129 and the result of the while loop being %v_130. The output of the loop is unpacked into these three unique SSA:
 
         ```text
         %v_130:0
@@ -283,11 +284,11 @@ In our lowering, we used three loops from the SCF dialect: scf.if, scf.for, and 
             scf.yield %v_125, %v_126, %v_129 : index, index, index
         }
         ```
-        When the conditions are true, the do block would be executed. The forwarded values from the loop's parameter becomes the block's arguments. Afterwards, scf.yield would produce the values used by the condition region in the next iteration. The loop variable of %v_55 would be replaced by %v_125, and %v_125 would become the arguments for the next iteration if the condition remains true. If the condition becomes false, the forwarded values become the final results of the loop.
+        When the conditions are true, the do block would be executed. The forwarded values from the loop's parameter becomes the block's arguments. Afterwards, scf.yield would produce the values used by the condition region in the next iteration. The loop variable %v_55 would be replaced by %v_125, which becomes the argument for the next iteration if the condition remains true. If the condition becomes false, the forwarded values become the final results of the loop.
 
 ## Auxiliary Function (Scansearch)
 
-During our lowering process, there was some operations that was not directly lowered into Finch Assembly IR, but instead emitted as calls to auxiliary functions provided by the backend. One of these operations was scansearch. Scansearch function originates from the [Finch](https://dl.acm.org/doi/pdf/10.1145/3720473) paper, and was described as the Finch's gallop protocol. The function allows sparse iterator to jump forward through a sorted coordinate array instead of scanning every coordinate. This function was needed by the sparse general matrix-matrix multiplication (SpGEMM) and sampled dense-dense matrix multiplication (SDDMM) kernels to match the sparse coordinates. In the MLIR backend, we opted to hard-code the function to support mlir index type or np.intp. Below is the scansearch function lowered to MLIR code:
+During our lowering process, there were some operations that were not directly lowered into Finch Assembly IR, but instead emitted as calls to auxiliary functions provided by the backend. One of these operations was scansearch. The scansearch function originates from the [Finch](https://dl.acm.org/doi/pdf/10.1145/3720473) paper, and was described as Finch's gallop protocol. The function allows a sparse iterator to jump forward through a sorted coordinate array instead of scanning every coordinate. This function was needed by the sparse general matrix-matrix multiplication (SpGEMM) and sampled dense-dense matrix multiplication (SDDMM) kernels to match the sparse coordinates. In the MLIR backend, we opted to hard-code the function to support mlir index type or np.intp. Below is the scansearch function lowered to MLIR code:
 
 ```text
 SCANSEARCH = """  func.func @scansearch(
@@ -343,9 +344,9 @@ note: "-":86:7: prior use here
 ```
 This error is to be expected as we hardcoded the scansearch function with this buffer type as `memref<?xindex>`. One possible solution is to generate a variant of this function for each element type. We have opened an [issue](https://github.com/finch-tensor/finch-tensor/issues/625) in the repository for this.
 
-## Bridging Finch-tensor to Scipy.sparse
+## Bridging Finch-tensor to scipy.sparse
 
-As part of my internship, I have also worked on other parts of the repository other than the MLIR code generation. I was tasked to add scipy.sparse support to finch-tensor interface function asarray. It was fun to dabble around interface-level code. I had a lot of fun converting Finch tensor formats to Scipy.sparse arrays. For my to_scipy implementation, we have used pattern matching of Finch tensor formats to scipy.arrays as seen here:
+As part of my internship, I have also worked on other parts of the repository other than the MLIR code generation. I was tasked to add scipy.sparse support to finch-tensor interface function asarray. It was fun to dabble around interface-level code. I had a lot of fun converting Finch tensor formats to scipy.sparse arrays. For my to_scipy implementation, we have used pattern matching of Finch tensor formats to scipy.sparse arrays as seen here:
 
 ```python
 match self.lvl:
@@ -393,7 +394,7 @@ All good things must come to an end. As the end of the internship draws near, we
 
 The benchmark results were collected on my personal MacBook using 10 to 100 iterations for every test to ensure consistency. Finch supports caching for its tensors, and the sparse tensors shown here used CSR format. The scipy.sparse constructor that we have discussed earlier was used to assist with the creation of the matrices used in the benchmarks!
 
-The first kernel that we would like to explore is Sampled Dense-Dense Matrix Multiplication (SDDMM). SDDMM is a well-known bottleneck in many machine learning workload, in particular graph neural networks and sparse attention in transformers. This marks the first evaluation of the MLIR backend using real-world workloads.
+The first kernel that we would like to explore is Sampled Dense-Dense Matrix Multiplication (SDDMM). SDDMM is a well-known bottleneck in many machine learning workloads, in particular graph neural networks and sparse attention in transformers. This marks the first evaluation of the MLIR backend using real-world workloads.
 
 Below is a comparison between the SciPy, MLIR, and Numba backends against the SDDMM kernel:
 
@@ -416,11 +417,11 @@ Below is a comparison between the SciPy, MLIR, and Numba backends against the SD
   </figure>
 </div>
 
-We can see that the performance of Numba and MLIR backend dwarfs the SciPy performance in the SDDMM kernel. This was to be expected as finch-tensor supports fusion within the compiler, whereas SciPy does not support fusion operations. In SDDMM, the kernel creates a large dense intermediate that is entirely bypassed by the fusion in finch-tensor using its autoscheduler. My MacBook’s hardware limitations likely contributed to the noticeable slowdown of the MLIR and Numba backends at sizes 25000 and 30000.
+We can see that the Numba and MLIR backends dwarf the SciPy performance in the SDDMM kernel. This was to be expected as finch-tensor supports fusion within the compiler, whereas SciPy does not support fusion operations. In SDDMM, the kernel creates a large dense intermediate that is entirely bypassed by the fusion in finch-tensor using its autoscheduler. My MacBook’s hardware limitations likely contributed to the noticeable slowdown of the MLIR and Numba backends at sizes 25000 and 30000.
 
-The graph on the right tells a different story. The MLIR backend performs better than the Numba backend across different sparsity and dimension sizes. In fact, we could see that the comparison between MLIR and Numba performance is non-negligible at the higher sparsity but MLIR performs better than Numba as the sparsity decreases.
+The graph on the right tells a different story. The MLIR backend performs better than the Numba backend across different sparsity and dimension sizes. In fact, we could see that the gap between MLIR and Numba performance is negligible at higher sparsity, but MLIR performs better than Numba as the sparsity decreases.
 
-Next, we would like to test how Numba and MLIR backend stack up against Scipy on traditional scientific computing workload. We have compared the backends against four different kernels: Hadamard multiplication, sparse matrix-vector multiplication (SpMV), sparse general matrix-matrix multiplication (SpGEMM) and chained sparse general matrix-matrix multiplication (SpGEMM2)
+Next, we would like to test how Numba and MLIR backend stack up against Scipy on traditional scientific computing workload. We have compared the backends against four different kernels: Hadamard multiplication, sparse matrix-vector multiplication (SpMV), sparse general matrix-matrix multiplication (SpGEMM) and chained sparse general matrix-matrix multiplication (SpGEMM2).
 
 For clarity, the computation performed by each kernel is expressed below using index notation:
 
@@ -449,7 +450,7 @@ For both the Hadamard multiplication and SpMV kernel, we can see that SciPy outp
   <figcaption className="mt-2 text-center">MLIR speedup over Numba (higher is better)</figcaption>
 </figure>
 
-In the graph above, we see a MLIR speedup graph against Numba against the various scientific computing kernels. We see a noticeable improvement in most of the kernels except for the Hadamard multiplication kernel. This proves that MLIR is the preferred backend in finch-tensor for most scientific computing kernels.
+In the graph above, we see a MLIR speedup graph against Numba against the various scientific computing kernels. We see a noticeable improvement in most of the kernels except for the Hadamard multiplication kernel. This suggests that MLIR is the preferred backend in finch-tensor for most scientific computing kernels.
 The MLIR backend performs better than the Numba backend when the kernel requires a reduction and complex control flow, whereas the Numba backend takes the stage when the kernel requires a simpler, memory bound operation.
 
 ## Future Goals
@@ -459,7 +460,7 @@ at the complexity of the language, but eventually I grew to appreciate it and ev
 I am proud of my contributions to finch-tensor, as we can pursue many different pathways with the new backend implementations.
 
 For future implementations, we plan to extend the MLIR backend to support GPU execution. This would indeed be an exciting and monumental project, as users
-and researchers can finally test the performance of finch-tensor on gpu hardwares. There are not many sparse tensor libraries on the market that provide
+and researchers can finally test the performance of finch-tensor on GPU hardware. There are not many sparse tensor libraries on the market that provide
 extensive GPU support, so this would help finch-tensor stand out. Personally, I would be interested to see how finch-tensor compares with other sparse tensor libraries
 on GPU architecture.
 
@@ -468,7 +469,7 @@ Combining fusion with the Linalg dialect is an optimization that sparks my imagi
 extend support for parallelism in finch-tensor using scf.parallel. Multithreading would offer another avenue of optimization
 for finch-tensor to explore.
 
-I am excited at the potential that my contributions have opened up to.
+I am excited about the potential my contributions have opened up.
 
 <img
   src="/posts/finch-meets-mlir/baby_image.png"
