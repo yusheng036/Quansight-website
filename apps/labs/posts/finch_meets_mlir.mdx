@@ -2,8 +2,8 @@
 title: "Finch meets MLIR"
 authors: [yu-sheng-aow]
 published: August 26, 2026
-description: 'A recap of my Quansight internship working on Finch: MLIR and Asarray implementation'
-category: [Beyond PyData, Internship]
+description: 'A recap of my Quansight internship working on Finch: MLIR codegen implementation'
+category: [Compilers, Internship]
 featuredImage:
   src: /posts/finch-meets-mlir/finch-hero.png
   alt: 'Pixel-art finch represented as a grid of numbered cells.'
@@ -54,22 +54,24 @@ the [first PR](https://github.com/finch-tensor/finch-tensor/commit/81490615793eb
 Tackling this dialect was tougher than it initially seemed. In MLIR, all values within an operation must share a common type, and that type determines which operation is selected. An example of a function can be seen here:
 
 ```python
-    case ffuncs.min:
-        # Floating-point minimum.
-        if MLIROperator.is_float(arg):
-            return "arith.minimumf"
+case ffuncs.min:
+    # Floating-point minimum.
+    if MLIROperator.is_float(arg):
+        return "arith.minimumf"
 
-        # Unsigned-integer minimum.
-        if MLIROperator.is_unsigned(arg):
-            return "arith.minui"
+    # Unsigned-integer minimum.
+    if MLIROperator.is_unsigned(arg):
+        return "arith.minui"
 
-        # Signed-integer minimum.
-        return "arith.minsi"
+    # Signed-integer minimum.
+    return "arith.minsi"
 ```
+
 Every function in the Arith dialect has a different operation for float, unsigned integer and signed integer. We need to follow MLIR's tight type checking to successfully lower our Finch Assembly IR.
 
 This is an example of a failed-compiled code:
-```text
+
+```rust
 // Create a floating-point constant.
 %0 = arith.constant 0.0 : float
 
@@ -79,10 +81,12 @@ This is an example of a failed-compiled code:
 // Fails due to typing inconsistencies.
 %mul = arith.minsi %0, %1 : index
 ```
+
 The reason behind the failed compilation was because both of the values used in the operation do not agree on a common type, with %0 being float type and %1 being an index type. When we execute the minimum operation, the %0 value does not agree with the strict type checking of the minsi operation, as minsi is only designated for signed integer values. However, the fix was just one line away!
 
 This is the right compiled code:
-```text
+
+```rust
 // Create a floating-point constant.
 %0 = arith.constant 0.0 : float
 
@@ -92,16 +96,18 @@ This is the right compiled code:
 // Performs min operation.
 %mul = arith.minimumf %0, %new_1 : float
 ```
+
 This code compiles because we used arith.index_cast to type-cast %1 with float type to %new_1 with index type. This type casting is prevalent throughout the lowering process as we had to follow the strict type checking that MLIR abides by.
 
 MLIR expresses values in the form of SSA (Static Single Assignment), where every value is assigned once and remains immutable. Chained operations were prevalent in Finch Assembly IR. Here is a snippet of it:
 
-```text
+```rust
 #i#41__pos: int64 = add(0, mul(#_A_3#38_stride_0, #i#41))
 ```
+
 In MLIR, we would have to introduce a unique SSA for every operation and constant, which would look like this:
 
-```text
+```rust
 // Create a unique SSA for each individual value.
 %i_41 = arith.constant 1 : i64
 %A_3_38_stride_0 = arith.constant 1 : i64
@@ -120,12 +126,11 @@ In MLIR, we would have to introduce a unique SSA for every operation and constan
   <img src="/posts/finch-meets-mlir/iceberg.png" width="300" alt="tip of the iceberg meme" />
 </p>
 
-
 Operation handling was just the tip of the iceberg; buffer management gets even more technical and complicated. It requires an in-depth compiler theory knowledge: ABI lowering, memory management and memory ownership. Passing buffers from one IR to another language requires complicated serializing and deserializing logic to pass buffers' metadata (i.e strides and shapes) otherwise the target language would not be able to extract any metadata from the struct passed into the kernel.
 
 First and foremost, I would like to talk about how buffers work in finch-tensor. Currently, buffers in finch-tensor are one-dimensional, resizable blocks of memory and appear as leaf fields at the ElementLevel. Levels are nested into chains, with each level representing the format of one dimension. Dense levels provide their dimension's size and strides, while sparse levels do the same but add integer buffers (ptr and idx) that record the tensor's nonzero entries. FiberTensor wraps the outermost level, accompanying it with the tensor's shape, pos and dirty-bit.
 
-```text
+```rust
 Dense Matrix Construction:
 
 FiberTensor
@@ -146,13 +151,14 @@ To successfully lower Finch Assembly IR buffers, the MLIR backend recursively lo
 
 - This is an example of a dense buffer being typecasted to memref:
 
-    ```text
+    ```rust
     %v = llvm.extractvalue %_A_15[0, 0, 0, 0] : !llvm.struct<(!llvm.struct<(!llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>)>, i64, i64)>, i64, i64)>, !llvm.struct<(i64, i64)>, i64, i1)>
     %v_2 = builtin.unrealized_conversion_cast %v : !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)> to memref<?xf64>
     ```
+
     We could see that the dense buffer is being indexed to the ElementLevel with `%_A_15[0, 0, 0, 0]` to extract the buffer. The buffer is then typecasted to `memref<?xf64>` as memref.store and memref.load can only be performed on memref buffers as seen here:
 
-    ```text
+    ```rust
     %v_52 = memref.load %v_2[%v_37] : memref<?xf64>
     ```
 
@@ -164,12 +170,12 @@ As structs cannot be returned through a normal return register, the caller alloc
 
 - This is an example of func.func for a dense matmul kernel
 
-    ```text
+    ```rust
     func.func @main(%_A_15: ..., %_A_16: ..., %_A_7: ..., %_ret: !llvm.ptr) attributes {llvm.emit_c_interface}
     ```
    The main function takes in four arguments: two `Dense(Dense(Element))` matrices (`%_A_15`, `%_A_16`), one `BufferizedNDArray` dense output matrix (`%_A_7`) and `%_ret`, where the result struct is stored into.
 
-   ```text
+   ```rust
     %v_56 = llvm.mlir.undef : !llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.struct<(i64, i64)>, !llvm.struct<(i64, i64)>)>)>
     %v_57 = llvm.insertvalue %_A_7, %v_56[0] : !llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.struct<(i64, i64)>, !llvm.struct<(i64, i64)>)>)>
     llvm.store %v_57, %_ret : !llvm.struct<(!llvm.struct<(!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.struct<(i64, i64)>, !llvm.struct<(i64, i64)>)>)>, !llvm.ptr
@@ -188,7 +194,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 -   ## scf.if
     In the example below, we see the usage of the scf.if from the sparse matmul kernel. There are many parts of the code that stick out. First of all, the condition of the branch is defined outside of the if statement. Only the condition's SSA is passed into the if statement parameter.
 
-    ```text
+    ```rust
     # If Condition
     %v_82 = memref.load %v_16[%v_73] : memref<?xindex>
     %v_83 = arith.cmpi slt, %v_82, %v_27 : index
@@ -210,7 +216,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 
     In the original Finch Assembly IR, the if statement does not have an else call. As seen here:
 
-    ```text
+    ```rust
     if lt(load(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), q), 0):
         q: finch.int64 = scansearch(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), 0, q, sub(q_stop, 1))
     ```
@@ -219,7 +225,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 
 - ## scf.for
     To create a for loop in MLIR, we need a unique SSA value for each component of the loop: the start, the end, the step, and the loop-carried variable.
-    ```text
+    ```rust
         %v_19 = arith.constant 0 : index
         %v_20 = memref.dim %v_14, %v_19 : memref<?xf64>
         %v_21 = arith.constant 1 : index
@@ -236,7 +242,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 - ## scf.while
     Lowering the Finch Assembly IR while loops to MLIR while loops was by far the toughest task in this internship. I was expecting a simple while loop that imitates the while loop you see in Python, but it looks wildly different from my expectations. This is an example of how the while loop is used in our sparse matrix multiplication kernel:
 
-    ```text
+    ```rust
         # While parameter
         %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index) {
 
@@ -256,19 +262,19 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 
     The while loop in MLIR is separated into three distinct regions: while parameter, condition block, and the while block. Let's dissect each region individually.
 
-    - ```text
+    - ```rust
         %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index)
         ```
         Similar to scf.if, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have been reassigned using the scoped dictionary.
 
         Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop are defined after the kernel has lowered the entire loop, as seen from the SSA yielded from the while body being %v_129 and the result of the while loop being %v_130. The output of the loop is unpacked into these three unique SSA:
 
-        ```text
+        ```rust
         %v_130:0
         %v_130:1
         %v_130:2
         ```
-    - ```text
+    - ```rust
         %v_58 = arith.addi %v_48, %v_29 : index
         %v_59 = arith.minsi %v_10, %v_58 : index
         %v_60 = arith.cmpi slt, %v_57, %v_59 : index
@@ -277,7 +283,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
         The condition block is defined within the while loop, unlike its counterpart scf.if, whose condition is defined outside the loop.
         The reassigned SSA in the loop's arguments are used in the condition definition instead of its original SSA, like %v_57 is defined in the parameter of the while loop but is used within the condition block to compare against %v_59 to create %v_60. The conditions are then passed into scf.condition using its SSA reference, with the loop's arguments and its types written beside it.
 
-    - ```text
+    - ```rust
         do {
         ^bb_2(%v_55: index, %v_56: index, %v_57: index):
             ...
@@ -290,7 +296,7 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 
 During our lowering process, there were some operations that were not directly lowered into Finch Assembly IR, but instead emitted as calls to auxiliary functions provided by the backend. One of these operations was scansearch. The scansearch function originates from the [Finch](https://dl.acm.org/doi/pdf/10.1145/3720473) paper, and was described as Finch's gallop protocol. The function allows a sparse iterator to jump forward through a sorted coordinate array instead of scanning every coordinate. This function was needed by the sparse general matrix-matrix multiplication (SpGEMM) and sampled dense-dense matrix multiplication (SDDMM) kernels to match the sparse coordinates. In the MLIR backend, we opted to hard-code the function to support mlir index type or np.intp. Below is the scansearch function lowered to MLIR code:
 
-```text
+```rust
 SCANSEARCH = """  func.func @scansearch(
     %arr: memref<?xindex>, %x: index, %lo: index, %hi: index
   ) -> index attributes {llvm.emit_c_interface} {
@@ -337,11 +343,14 @@ SCANSEARCH = """  func.func @scansearch(
   }
 """
 ```
+
 Currently, scansearch does not support index buffers with other data types, such as i32. Therefore, the integer buffers of matrices created with scipy.sparse.random must be cast to np.intp before they can be compiled. This error occurs when a matrix with i32 index buffers is compiled as part of a SpGEMM kernel:
+
 ```text
 error: "-":87:33: use of value '%v_37' expects different type than prior uses: 'i32' vs 'index'
 note: "-":86:7: prior use here
 ```
+
 This error is to be expected as we hardcoded the scansearch function with this buffer type as `memref<?xindex>`. One possible solution is to generate a variant of this function for each element type. We have opened an [issue](https://github.com/finch-tensor/finch-tensor/issues/625) in the repository for this.
 
 ## Bridging Finch-tensor to scipy.sparse
@@ -390,6 +399,7 @@ match obj.format:
 If you are interested to check it out, here is the [pull request](https://github.com/finch-tensor/finch-tensor/commit/bac382d956be23135560035e1c99217d397557db) for the implementation.
 
 ## Benchmark Results
+
 All good things must come to an end. As the end of the internship draws near, we have gathered some benchmarking results to compare the MLIR backend with pre-existing backends in finch-tensor and other sparse tensor libraries in the market.
 
 The benchmark results were collected on my personal MacBook using 10 to 100 iterations for every test to ensure consistency. Finch supports caching for its tensors, and the sparse tensors shown here used CSR format. The scipy.sparse constructor that we have discussed earlier was used to assist with the creation of the matrices used in the benchmarks!
