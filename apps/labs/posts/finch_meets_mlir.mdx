@@ -192,119 +192,122 @@ On top of that, `scf` constructs require an additional pass through the entire c
 
 In our lowering, we used three constructs from the `csf` dialect: `scf.if`, `scf.for`, and `scf.while`. Let's walk through each of the implementations:
 
--   ## `scf.if`
-    In the example below, we see the usage of the `scf.if` from the sparse matmul kernel. There are many parts of the code that stick out. First of all, the condition of the branch is defined outside of the if statement. Only the condition's SSA is passed into the if statement parameter.
+### `scf.if`
 
-    ```mlir
-    # If Condition
-    %v_82 = memref.load %v_16[%v_73] : memref<?xindex>
-    %v_83 = arith.cmpi slt, %v_82, %v_27 : index
+In the example below, we see the usage of the `scf.if` from the sparse matmul kernel. There are many parts of the code that stick out. First of all, the condition of the branch is defined outside of the if statement. Only the condition's SSA is passed into the if statement parameter.
 
-    # If Statement with return SSA
-    %v_86 = scf.if %v_83 -> (index) {
-    %v_84 = arith.subi %v_75, %v_29 : index
-    %v_85 = func.call @scansearch(%v_16, %v_27, %v_73, %v_84) : (memref<?xindex>, index, index, index) -> index
-    scf.yield %v_85 : index
+```mlir
+# If Condition
+%v_82 = memref.load %v_16[%v_73] : memref<?xindex>
+%v_83 = arith.cmpi slt, %v_82, %v_27 : index
 
-    # Else Statement
-    } else {
-    scf.yield %v_73 : index
-    }
-    ```
-    The if statement also creates its own result in SSA form on the left with its type defined on the right. We made two different regions to achieve this: a main block and a body block with its own dictionary. The body block would be executed first to examine the reassignment made to its dictionary. After collecting all rewritten variables, we update the main block’s dictionary with a new return SSA for each value and emit the resulting SSA list beside the if statement.
+# If Statement with return SSA
+%v_86 = scf.if %v_83 -> (index) {
+%v_84 = arith.subi %v_75, %v_29 : index
+%v_85 = func.call @scansearch(%v_16, %v_27, %v_73, %v_84) : (memref<?xindex>, index, index, index) -> index
+scf.yield %v_85 : index
 
-    You could try to follow it yourself, every new SSA is made by calling freshen where they place an accumulator that increments every time it has been called. You could see that the inner body is made before the outer body as `%v_86` comes before `%v_85`.
+# Else Statement
+} else {
+scf.yield %v_73 : index
+}
+```
 
-    In the original Finch Assembly IR, the if statement does not have an else call. As seen here:
+The if statement also creates its own result in SSA form on the left with its type defined on the right. We made two different regions to achieve this: a main block and a body block with its own dictionary. The body block would be executed first to examine the reassignment made to its dictionary. After collecting all rewritten variables, we update the main block’s dictionary with a new return SSA for each value and emit the resulting SSA list beside the if statement.
 
-    ```mlir
-    if lt(load(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), q), 0):
-        q: finch.int64 = scansearch(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), 0, q, sub(q_stop, 1))
-    ```
+You could try to follow it yourself, every new SSA is made by calling freshen where they place an accumulator that increments every time it has been called. You could see that the inner body is made before the outer body as `%v_86` comes before `%v_85`.
 
-    However, we see the existence of the else block in the MLIR code. The reasoning behind this addition was that we track the value reassignment in the body block before the execution of the lowering. The body block compares its dictionary with the main block to track the values that have been mutated or reassigned to determine whether the else block is written. Only in some unique cases, like rewriting a buffer and making a new value within the if statement, the else block would not be emitted.
+In the original Finch Assembly IR, the if statement does not have an else call. As seen here:
 
+```mlir
+if lt(load(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), q), 0):
+    q: finch.int64 = scansearch(slot(#_A_9#4_lvl_lvl_idx_slot, np_buf_t(int64)), 0, q, sub(q_stop, 1))
+```
 
-- ## `scf.for`
-    To create a for loop in the MLIR, we need a unique SSA value for each component of the loop: the start, the end, the step, and the loop-carried variable.
+However, we see the existence of the else block in the MLIR code. The reasoning behind this addition was that we track the value reassignment in the body block before the execution of the lowering. The body block compares its dictionary with the main block to track the values that have been mutated or reassigned to determine whether the else block is written. Only in some unique cases, like rewriting a buffer and making a new value within the if statement, the else block would not be emitted.
 
-    ```mlir
-    %v_19 = arith.constant 0 : index
-    %v_20 = memref.dim %v_14, %v_19 : memref<?xf64>
-    %v_21 = arith.constant 1 : index
-    scf.for %v_22 = %v_19 to %v_20 step %v_21 {
-      %v_23 = arith.constant 0.0 : f64
-      memref.store %v_23, %v_14[%v_22] : memref<?xf64>
-    }
-    ```
+### `scf.for`
 
-    The example above shows an output buffer being initialized with zeroes. The operation used a `scf.for` loop to iterate across every input in the buffer. This is a quick rundown of what each SSA represents. `%v_19` is the loop's starting index, `%v_20` is the buffer's length, and the upper bound of the loop. `%v_21` is the step size, while `%v_22` represents the induction variable that advances from `%v_19` toward `%v_20` by `%v_21` on each iteration. All of the SSA values involved in a for loop have to be type-cast to the specialized MLIR index type to be compiled.
-    The dictionary are updated with the new variables after every iteration.
+To create a for loop in the MLIR, we need a unique SSA value for each component of the loop: the start, the end, the step, and the loop-carried variable.
 
-    The MLIR for loop resembles a for loop we would typically see in C or Python. The for loop gave me a sense of normalcy that I can't really describe in words. Trying to understand MLIR from scratch was a difficult task but lowering it from another IR was an upheaval.
+```mlir
+%v_19 = arith.constant 0 : index
+%v_20 = memref.dim %v_14, %v_19 : memref<?xf64>
+%v_21 = arith.constant 1 : index
+scf.for %v_22 = %v_19 to %v_20 step %v_21 {
+  %v_23 = arith.constant 0.0 : f64
+  memref.store %v_23, %v_14[%v_22] : memref<?xf64>
+}
+```
 
-- ## `scf.while`
-    Lowering the Finch Assembly IR while loops to MLIR while loops was by far the toughest task in this internship. I was expecting a simple while loop that imitates the while loop you see in Python, but it looks wildly different from my expectations. This is an example of how the while loop is used in our sparse matrix multiplication kernel:
+The example above shows an output buffer being initialized with zeroes. The operation used a `scf.for` loop to iterate across every input in the buffer. This is a quick rundown of what each SSA represents. `%v_19` is the loop's starting index, `%v_20` is the buffer's length, and the upper bound of the loop. `%v_21` is the step size, while `%v_22` represents the induction variable that advances from `%v_19` toward `%v_20` by `%v_21` on each iteration. All of the SSA values involved in a for loop have to be type-cast to the specialized MLIR index type to be compiled.
+The dictionary are updated with the new variables after every iteration.
 
-    ```mlir
-    # While Parameter
-    %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index) {
+The MLIR for loop resembles a for loop we would typically see in C or Python. The for loop gave me a sense of normalcy that I can't really describe in words. Trying to understand MLIR from scratch was a difficult task but lowering it from another IR was an upheaval.
 
-        # Condition Block
-        %v_58 = arith.addi %v_48, %v_29 : index
-        %v_59 = arith.minsi %v_10, %v_58 : index
-        %v_60 = arith.cmpi slt, %v_57, %v_59 : index
-        scf.condition(%v_60) %v_55, %v_56, %v_57 : index, index, index
+### `scf.while`
 
-    # While Block
-    } do {
-    ^bb_2(%v_55: index, %v_56: index, %v_57: index):
-        ...
-        scf.yield %v_125, %v_126, %v_129 : index, index, index
-    }
-    ```
+Lowering the Finch Assembly IR while loops to MLIR while loops was by far the toughest task in this internship. I was expecting a simple while loop that imitates the while loop you see in Python, but it looks wildly different from my expectations. This is an example of how the while loop is used in our sparse matrix multiplication kernel:
 
-    The while loop in MLIR is separated into three distinct regions: while parameter, condition block, and the while block. Let's dissect each region individually.
+```mlir
+# While Parameter
+%v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index) {
 
-    - While Parameter
+    # Condition Block
+    %v_58 = arith.addi %v_48, %v_29 : index
+    %v_59 = arith.minsi %v_10, %v_58 : index
+    %v_60 = arith.cmpi slt, %v_57, %v_59 : index
+    scf.condition(%v_60) %v_55, %v_56, %v_57 : index, index, index
 
-      ```mlir
-      %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index)
-      ```
+# While Block
+} do {
+^bb_2(%v_55: index, %v_56: index, %v_57: index):
+    ...
+    scf.yield %v_125, %v_126, %v_129 : index, index, index
+}
+```
 
-      Similar to `scf.if`, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have been reassigned using the scoped dictionary.
+The while loop in MLIR is separated into three distinct regions: while parameter, condition block, and the while block. Let's dissect each region individually.
 
-      Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop are defined after the kernel has lowered the entire loop, as seen from the SSA yielded from the while body being `%v_129` and the result of the while loop being `%v_130`. The output of the loop is unpacked into these three unique SSAs:
+- ### While Parameter
 
-      ```mlir
-      %v_130:0
-      %v_130:1
-      %v_130:2
-      ```
+  ```mlir
+  %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index)
+  ```
 
-    - Condition Block
+  Similar to `scf.if`, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have been reassigned using the scoped dictionary.
 
-      ```mlir
-      %v_58 = arith.addi %v_48, %v_29 : index
-      %v_59 = arith.minsi %v_10, %v_58 : index
-      %v_60 = arith.cmpi slt, %v_57, %v_59 : index
-      scf.condition(%v_60) %v_55, %v_56, %v_57 : index, index, index
-      ```
+  Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop are defined after the kernel has lowered the entire loop, as seen from the SSA yielded from the while body being `%v_129` and the result of the while loop being `%v_130`. The output of the loop is unpacked into these three unique SSAs:
 
-      The condition block is defined within the while loop, unlike its counterpart `scf.if`, whose condition is defined outside the loop.
-      The reassigned SSA in the loop's arguments are used in the condition definition instead of its original SSA, like `%v_57` is defined in the parameter of the while loop but is used within the condition block to compare against `%v_59` to create `%v_60`. The conditions are then passed into `scf.condition` using its SSA reference, with the loop's arguments and its types written beside it.
+  ```mlir
+  %v_130:0
+  %v_130:1
+  %v_130:2
+  ```
 
-    - While Block
+- ### Condition Block
 
-      ```mlir
-      do {
-      ^bb_2(%v_55: index, %v_56: index, %v_57: index):
-          ...
-          scf.yield %v_125, %v_126, %v_129 : index, index, index
-      }
-      ```
+  ```mlir
+  %v_58 = arith.addi %v_48, %v_29 : index
+  %v_59 = arith.minsi %v_10, %v_58 : index
+  %v_60 = arith.cmpi slt, %v_57, %v_59 : index
+  scf.condition(%v_60) %v_55, %v_56, %v_57 : index, index, index
+  ```
 
-      When the conditions are true, the `do` block would be executed. The forwarded values from the loop's parameter becomes the block's arguments. Afterwards, `scf.yield` would produce the values used by the condition region in the next iteration. The loop variable `%v_55` would be replaced by `%v_125`, which becomes the argument for the next iteration if the condition remains true. If the condition becomes false, the forwarded values become the final results of the loop.
+  The condition block is defined within the while loop, unlike its counterpart `scf.if`, whose condition is defined outside the loop.
+  The reassigned SSA in the loop's arguments are used in the condition definition instead of its original SSA, like `%v_57` is defined in the parameter of the while loop but is used within the condition block to compare against `%v_59` to create `%v_60`. The conditions are then passed into `scf.condition` using its SSA reference, with the loop's arguments and its types written beside it.
+
+- ### While Block
+
+  ```mlir
+  do {
+  ^bb_2(%v_55: index, %v_56: index, %v_57: index):
+      ...
+      scf.yield %v_125, %v_126, %v_129 : index, index, index
+  }
+  ```
+
+  When the conditions are true, the `do` block would be executed. The forwarded values from the loop's parameter becomes the block's arguments. Afterwards, `scf.yield` would produce the values used by the condition region in the next iteration. The loop variable `%v_55` would be replaced by `%v_125`, which becomes the argument for the next iteration if the condition remains true. If the condition becomes false, the forwarded values become the final results of the loop.
 
 ## Auxiliary Function (Scansearch)
 
