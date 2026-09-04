@@ -14,7 +14,7 @@ hero:
 
 ## Introduction
 
-This summer, I had the opportunity to work on [finch-tensor](https://github.com/finch-tensor/finch-tensor) compiler for my internship. I was given a project to implement a brand new backend for the compiler, using [MLIR](https://mlir.llvm.org/) - Multi-Level Intermediate Representation Compiler Framework, and implement some technical work that bridges `scipy.sparse` arrays and Finch tensors. Before I dive deep into the technical jargon, here is a short story about an undergraduate student finding his footing in the open-source community.
+This summer, I had the opportunity to work on a [finch-tensor](https://github.com/finch-tensor/finch-tensor) compiler for my internship. I was given a project to implement a brand new backend for the compiler, using [MLIR](https://mlir.llvm.org/) - Multi-Level Intermediate Representation Compiler Framework, and implement some technical work that bridges `scipy.sparse` arrays and Finch tensors. Before I dive deep into the technical jargon, here is a short story about an undergraduate student finding his footing in the open-source community.
 
 During my freshman year, I took my first Python introductory course. It didn't leave a big impression on me. The class revolved around writing code by hand, which I found to be a miserable experience.
 It was only when I took an algorithms course the following semester that I began to realize the complexity and beauty of the computing world. During my sophomore year, I started cold-emailing professors about my interest in contributing to their research. One of my professors reached back out to me, telling me that there was a new faculty member coming into the college who was doing interesting work in sparse tensors. I was thrilled to be a part of this research. I didn't know it at the time, but that decision was going to change my life, as that was my first exposure to the open-source community.
@@ -27,7 +27,7 @@ For my first task in the internship, I was tasked with determining the feasibili
 
 Coming into this project, I had no clue what MLIR was. I had to dig through all of the MLIR documentation and understand thoroughly what a dialect was. To my best understanding, a dialect is a set of operations living at a specific abstraction level - an IR that allows MLIR to express control over every layer of execution. Dialects are lowered from high-level operations to lower-level ones. There were plenty of dialects in MLIR, but these were some of the unique ones that I have identified:
 
-- [gpu](https://mlir.llvm.org/docs/Dialects/GPU/) dialect provides a middle level abstraction for launching GPU kernels.
+- [GPU](https://mlir.llvm.org/docs/Dialects/GPU/) dialect provides a middle level abstraction for launching GPU kernels.
 - [TOSA](https://mlir.llvm.org/docs/Dialects/TOSA/#tosa-and-tensor-level-expressiveness) dialect represents tensor computations common in machine learning settings.
 - [XeGPU](https://mlir.llvm.org/docs/Dialects/XeGPU/) dialect provides GPU abstractions for Intel Xe GPUs.
 
@@ -39,17 +39,17 @@ My first task in the internship would be drafting up a hand-written MLIR kernel 
 
 These were the dialects that were utilised in our lowering:
 
-- [arith](https://mlir.llvm.org/docs/Dialects/ArithOps/) dialect for the mathematical operations (e.g. `add` and `mul`).
-- [memref](https://mlir.llvm.org/docs/Dialects/MemRef/) dialect for buffers.
-- [scf](https://mlir.llvm.org/docs/Dialects/SCFDialect/) dialect to represent control flow constructs (e.g. for and while).
-- [llvm](https://mlir.llvm.org/docs/Dialects/LLVM/) dialect to represent ctypes struct passed into the kernel.
-- [builtin](https://mlir.llvm.org/docs/Dialects/Builtin/) dialect to convert llvm.struct into memref.
-- [func](https://mlir.llvm.org/docs/Dialects/Func/) dialect to support user-defined functions.
+- [`arith`](https://mlir.llvm.org/docs/Dialects/ArithOps/) dialect for the mathematical operations (e.g. `add` and `mul`).
+- [`memref`](https://mlir.llvm.org/docs/Dialects/MemRef/) dialect for buffers.
+- [`scf`](https://mlir.llvm.org/docs/Dialects/SCFDialect/) dialect to represent control flow constructs (e.g. for and while).
+- [`llvm`](https://mlir.llvm.org/docs/Dialects/LLVM/) dialect to represent ctypes struct passed into the kernel.
+- [`builtin`](https://mlir.llvm.org/docs/Dialects/Builtin/) dialect to convert llvm.struct into memref.
+- [`func`](https://mlir.llvm.org/docs/Dialects/Func/) dialect to support user-defined functions.
 
 This article presents my thoughts on and understanding of MLIR. If you are interested in exploring my contributions, they are summarized in two pull requests:
 the [first PR](https://github.com/finch-tensor/finch-tensor/commit/81490615793eb20de27b0bd927a00a178883c103) and the [second PR](https://github.com/finch-tensor/finch-tensor/commit/eea27d7fcd2a83c00812ca06b600dff7768f32c9).
 
-## `arith` dialect
+## `arith` Dialect
 
 Tackling this dialect was tougher than it initially seemed. In MLIR, all values within an operation must share a common type, and that type determines which operation is selected. An example of a function can be seen here:
 
@@ -266,9 +266,12 @@ In our lowering, we used three constructs from the `csf` dialect: `scf.if`, `scf
 
     The while loop in MLIR is separated into three distinct regions: while parameter, condition block, and the while block. Let's dissect each region individually.
 
-    - ```mlir
+    - While Parameter
+
+        ```mlir
         %v_130:3 = scf.while (%v_55 = %v_27, %v_56 = %v_54, %v_57 = %v_49) : (index, index, index) -> (index, index, index)
         ```
+
         Similar to `scf.if`, we assign a unique region for the body of the while loop and the main region, and we recursively make a pass over the while body to assess the values that have been reassigned using the scoped dictionary.
 
         Once we have gathered the list of values changed in the loop, we can finally start assembling the parameters for the while loop. The values affected by the while loop have to be reassigned to a temporary SSA so they can be used in the condition definition and the while block. The return values of the loop are defined after the kernel has lowered the entire loop, as seen from the SSA yielded from the while body being `%v_129` and the result of the while loop being `%v_130`. The output of the loop is unpacked into these three unique SSAs:
@@ -279,16 +282,21 @@ In our lowering, we used three constructs from the `csf` dialect: `scf.if`, `scf
         %v_130:2
         ```
 
-    - ```mlir
+    - Condition Block
+
+        ```mlir
         %v_58 = arith.addi %v_48, %v_29 : index
         %v_59 = arith.minsi %v_10, %v_58 : index
         %v_60 = arith.cmpi slt, %v_57, %v_59 : index
         scf.condition(%v_60) %v_55, %v_56, %v_57 : index, index, index
         ```
+
         The condition block is defined within the while loop, unlike its counterpart `scf.if`, whose condition is defined outside the loop.
         The reassigned SSA in the loop's arguments are used in the condition definition instead of its original SSA, like `%v_57` is defined in the parameter of the while loop but is used within the condition block to compare against `%v_59` to create `%v_60`. The conditions are then passed into `scf.condition` using its SSA reference, with the loop's arguments and its types written beside it.
 
-    - ```mlir
+    - While Block
+
+        ```mlir
         do {
         ^bb_2(%v_55: index, %v_56: index, %v_57: index):
             ...
