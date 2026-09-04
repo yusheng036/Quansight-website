@@ -230,8 +230,8 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
         %v_20 = memref.dim %v_14, %v_19 : memref<?xf64>
         %v_21 = arith.constant 1 : index
         scf.for %v_22 = %v_19 to %v_20 step %v_21 {
-        %v_23 = arith.constant 0.0 : f64
-        memref.store %v_23, %v_14[%v_22] : memref<?xf64>
+          %v_23 = arith.constant 0.0 : f64
+          memref.store %v_23, %v_14[%v_22] : memref<?xf64>
         }
     ```
     The example above shows an output buffer being initialized with zeroes. The operation used a scf.for loop to iterate across every input in the buffer. This is a quick rundown of what each SSA represents. %v_19 is the loop's starting index, %v_20 is the buffer's length, and the upper bound of the loop. %v_21 is the step size, while %v_22 represent the induction variable that is advanced from %v_19 toward %v_20 by %v_21 on each iteration. All of the SSA values involved in a for loop have to be type-cast to the specialized MLIR index type to be compiled.
