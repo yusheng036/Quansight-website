@@ -297,7 +297,8 @@ In our lowering, we used three constructs from the SCF dialect: scf.if, scf.for,
 During our lowering process, there were some operations that were not directly lowered into Finch Assembly IR, but instead emitted as calls to auxiliary functions provided by the backend. One of these operations was scansearch. The scansearch function originates from the [Finch](https://dl.acm.org/doi/pdf/10.1145/3720473) paper, and was described as Finch's gallop protocol. The function allows a sparse iterator to jump forward through a sorted coordinate array instead of scanning every coordinate. This function was needed by the sparse general matrix-matrix multiplication (SpGEMM) and sampled dense-dense matrix multiplication (SDDMM) kernels to match the sparse coordinates. In the MLIR backend, we opted to hard-code the function to support mlir index type or np.intp. Below is the scansearch function lowered to MLIR code:
 
 ```rust
-SCANSEARCH = """  func.func @scansearch(
+SCANSEARCH = """
+  func.func @scansearch(
     %arr: memref<?xindex>, %x: index, %lo: index, %hi: index
   ) -> index attributes {llvm.emit_c_interface} {
     %1 = arith.constant 1 : index
