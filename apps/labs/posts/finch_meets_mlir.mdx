@@ -33,6 +33,17 @@ Coming into this project, I had no clue what MLIR was. I had to dig through all 
 
 The versatility of MLIR is extensive, allowing programs to extend to GPU and even specialized hardware such as Intel Xe GPUs, and each dialects are easily utilised with easy, and composable features.
 
+<figure>
+  <img
+    src="/posts/finch-meets-mlir/Finch%20pipeline.png"
+    alt="Finch compiler pipeline from the Python Array API through Finch Logic, Finch Notation, and Finch Assembly to the Numba, C, and MLIR backends, highlighting the author's MLIR implementation"
+    style={{ display: 'block', width: '100%', maxWidth: '640px', height: 'auto', margin: '0 auto' }}
+  />
+  <figcaption className="mt-2 text-center">
+    finch-tensor pipeline
+  </figcaption>
+</figure>
+
 As part of my project, I had to determine the feasibility of lowering Finch Assembly IR to MLIR. Finch Assembly IR is a backend-agnostic IR in the finch-tensor that allows code generation lowering to any specific backend. Currently, finch-tensor has two backends: C and Numba. MLIR would be vastly different from the two other backends, as Numba was written in Python while C was written in C. Implementing MLIR would take a great understanding of the MLIR language and its capabilities. Does MLIR allow the lowering of Finch Assembly IR, considering its unique semantics and assumptions?
 
 My first task in the internship would be drafting up a hand-written MLIR kernel with a minimal set of dialects usage to match the Finch Assembly IR in the finch-tensor. We deemed that Dense Matrix Multiplication, Sparse Matrix Multiplication and Sampled Dense-Dense Matrix Multiplication (SDDMM) would be the kernels we try to lower to MLIR.
@@ -445,7 +456,8 @@ Below is a comparison between the SciPy, MLIR, and Numba backends against the SD
   </figure>
 </div>
 
-We can see that the Numba and MLIR backends dwarf the SciPy performance in the SDDMM kernel. This was to be expected as finch-tensor supports fusion within the compiler, whereas SciPy does not support fusion of operations. In SDDMM, the kernel creates a large dense intermediate that is entirely bypassed by the fusion in finch-tensor using its autoscheduler capabilities. My MacBook's hardware limitations likely contributed to the noticeable slowdown of the MLIR and Numba backends at sizes 25000 and 30000.
+We can see that the Numba and MLIR backends dwarf the SciPy performance in the SDDMM kernel. This was to be expected as finch-tensor supports fusion within the compiler, whereas SciPy does not support fusion of operations. In SDDMM, the kernel creates a large dense intermediate that is entirely bypassed by the fusion in finch-tensor using its autoscheduler capabilities.
+Autoscheduling is an open research area that relies on heuristic algorithms to choose efficient join strategies within a kernel. It is tricky to get it right but when done well, the performance gains are undeniable. My MacBook's hardware limitations likely contributed to the noticeable slowdown of the MLIR and Numba backends at sizes 25000 and 30000.
 
 The graph on the right tells a different story. The MLIR backend performs better than the Numba backend across different sparsity and dimension sizes. In fact, we could see that the gap between MLIR and Numba performance is negligible at higher sparsity, but MLIR performs better than Numba as the sparsity decreases.
 
@@ -502,4 +514,3 @@ I am excited about the potential projects my contributions have opened up.
   alt="A child wearing a red knit hat smiles at the camera."
   style={{ display: 'block', width: '100%', maxWidth: '28rem', height: 'auto', margin: '2rem auto' }}
 />
-
